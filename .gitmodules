@@ -1,0 +1,4 @@
+[submodule "abstracts-full"]
+	path = abstracts-full
+	url = https://github.com/ohbm-wannabe/ohbm2020-abstracts-full.git
+	datalad-id = b874edc8-8d10-44a7-b1a0-839a3d33586a
