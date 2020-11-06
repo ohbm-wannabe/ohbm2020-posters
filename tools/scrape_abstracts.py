@@ -1,12 +1,21 @@
 #!/usr/bin/env python3
 
 from collections import Counter
+from pathlib import Path
 import json
 import re
 from string import punctuation as PUNCTUATION
 
 from bs4 import BeautifulSoup
 import requests
+
+import logging
+lgr = logging.getLogger('gallop.scrape')
+logging.basicConfig(level=logging.DEBUG,
+                    format='%(asctime)s %(name)-12s %(levelname)-8s %(message)s')
+lgr.setLevel(logging.DEBUG)
+
+abstracts_full_path = Path('abstracts-full')
 
 
 def check_figure_caption_end(node):
@@ -25,6 +34,21 @@ def loop_until_end(text, start, end, sep=''):
     # recurse, baby
     return loop_until_end(text, start.find_next('div'), end, sep=sep)
 
+"""
+# by day/time slot/sessions (with intro slides) with chairs/list of talkes with authors
+Oral sessions/round tables: https://www.humanbrainmapping.org/i4a/pages/index.cfm?pageID=3988
+Symposia: https://www.humanbrainmapping.org/i4a/pages/index.cfm?pageID=3989
+
+# some other - no slides nothing
+Talairach + keynotes: https://www.humanbrainmapping.org/i4a/pages/index.cfm?pageID=3987
+
+# some other format, at least times might be consistent
+Engagement Lounges https://www.humanbrainmapping.org/i4a/pages/index.cfm?pageID=4005
+
+# other custom formats
+
+Chinese Young Scholars: https://www.humanbrainmapping.org/i4a/pages/index.cfm?pageID=3997
+"""
 
 # get list of all abstract IDs (these are NOT poster IDs; they're for internal
 # use in the OHBM abstract system)
@@ -34,6 +58,7 @@ abstract_no = re.compile(r'\((\d+)\)')
 url = "https://ww4.aievolution.com/hbm2001/index.cfm?do=abs.pubSearchAbstracts"
 abslist = requests.get(url)
 abslist.raise_for_status()
+# lgr.info("And here we go...: %s", url)
 content = BeautifulSoup(abslist.content, 'lxml')
 abstracts = []
 url = "https://ww4.aievolution.com/hbm2001/index.cfm?do=abs.viewAbs&abs={}"
@@ -51,19 +76,25 @@ for abno in content.find_all('td', attrs={'class': 'abstractnumber'}):
 relevant = ['Introduction:', 'Methods:', 'Results:', 'Conclusions:']
 bag_of_words = Counter()
 for n, abstr in enumerate(abstracts):
+    number = abstr['number']
     if n % 10 == 0:
         print(n)
     # let's not re-run this for things we've already run (if you're messing
     # around interactively)
     if abstr.get('abstract') is not None:
         continue
-
-    # get the abstract webpage
-    resp = requests.get(abstr['url'])
-    resp.raise_for_status()
+    abstr_path = abstracts_full_path / f"{number}.html"
+    if abstr_path.exists():
+        content = abstr_path.read_bytes()
+    else:
+        # get the abstract webpage
+        resp = requests.get(abstr['url'])
+        resp.raise_for_status()
+        content = resp.content
+        abstr_path.write_bytes(content)
     abstr["software-demo"] = \
-       b"presentation: software demonstrations" in resp.content.lower()
-    page = BeautifulSoup(resp.content, 'lxml')
+       b"presentation: software demonstrations" in content.lower()
+    page = BeautifulSoup(content, 'lxml')
 
     # get the abstract body and other relevant info
     body = set()
